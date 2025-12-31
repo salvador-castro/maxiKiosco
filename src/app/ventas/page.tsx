@@ -45,6 +45,9 @@ export default function VentasPage() {
     const [items, setItems] = useState<VentaItem[]>([]);
     const [formaPago, setFormaPago] = useState("efectivo");
 
+    const [wantsFactura, setWantsFactura] = useState(false);
+    const [clienteDoc, setClienteDoc] = useState("");
+
     // UI State for keyboard navigation
     const [selectedRowIndex, setSelectedRowIndex] = useState<number>(-1);
     const quantityInputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -300,6 +303,7 @@ export default function VentasPage() {
 
         setProcessing(true);
         try {
+            // 1. Create Sale
             const body = {
                 items: items.map((i) => ({
                     id_producto: i.id_producto,
@@ -318,11 +322,39 @@ export default function VentasPage() {
 
             const json = await res.json();
             if (!res.ok) throw new Error(json?.error ?? "Error creando venta");
+            
+            const newVentaId = json.data.id_venta;
 
-            toast("¡Venta completada exitosamente!", "success");
+            // 2. Generate Invoice (if requested)
+            if (wantsFactura) {
+                 try {
+                     const invoiceRes = await fetch("/api/ventas/facturar", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ 
+                            id_venta: newVentaId,
+                            doc_nro: clienteDoc ? parseInt(clienteDoc) : 0
+                        }),
+                     });
+                     const invoiceJson = await invoiceRes.json();
+                     if (!invoiceRes.ok) {
+                         toast(`Venta OK, pero error al facturar: ${invoiceJson.error}`, "warning");
+                     } else {
+                         toast("Venta y Factura registradas exitosamente!", "success");
+                     }
+                 } catch (err: any) {
+                     console.error(err);
+                     toast("Venta OK, pero falló la conexión con AFIP", "warning");
+                 }
+            } else {
+                toast("¡Venta completada exitosamente!", "success");
+            }
+
             setItems([]);
             setSelectedRowIndex(-1);
             setConfirmOpen(false);
+            setWantsFactura(false);
+            setClienteDoc("");
         } catch (e: any) {
             toast(e?.message ?? "Error", "error");
         } finally {
@@ -628,11 +660,33 @@ export default function VentasPage() {
                                 </div>
                             </div>
 
-                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                                <div className="text-sm text-amber-800">
-                                    <strong>Nota:</strong> Esta venta NO se facturará electrónicamente. La integración con
-                                    AFIP/ARCA está pendiente.
+                            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
+                                <div className="flex items-center gap-3">
+                                    <input 
+                                        type="checkbox" 
+                                        id="afip-check"
+                                        checked={wantsFactura}
+                                        onChange={(e) => setWantsFactura(e.target.checked)}
+                                        className="h-5 w-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                                    />
+                                    <label htmlFor="afip-check" className="text-sm font-medium text-slate-700">
+                                        Generar Factura ARCA (AFIP)
+                                    </label>
                                 </div>
+                                
+                                {wantsFactura && (
+                                    <div>
+                                        <label className="block text-xs text-slate-500 mb-1">DNI/CUIT Cliente (Opcional)</label>
+                                        <input 
+                                            type="text" 
+                                            value={clienteDoc}
+                                            onChange={(e) => setClienteDoc(e.target.value.replace(/\D/g, ''))}
+                                            placeholder="Ingresar número..."
+                                            className="w-full rounded-lg border border-slate-200 p-2 text-sm focus:border-emerald-300 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+                                        />
+                                        <p className="text-xs text-slate-400 mt-1">Si se deja vacío, se factura a Consumidor Final anónimo.</p>
+                                    </div>
+                                )}
                             </div>
                         </div>
 

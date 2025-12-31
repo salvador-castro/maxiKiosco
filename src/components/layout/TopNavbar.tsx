@@ -79,7 +79,10 @@ export default function TopNavbar() {
   const router = useRouter()
   const { isLoggedIn, user, logout } = useSession()
   const [isComprasOpen, setIsComprasOpen] = useState(false)
+  // const [isConfigOpen, setIsConfigOpen] = useState(false) // Removed
+  const [isCajasOpen, setIsCajasOpen] = useState(false) // New Cajas dropdown
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const cajasDropdownRef = useRef<HTMLDivElement>(null)
 
   const isHome = pathname === '/'
   const isLogin = pathname === '/login'
@@ -94,16 +97,19 @@ export default function TopNavbar() {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsComprasOpen(false)
       }
+      if (cajasDropdownRef.current && !cajasDropdownRef.current.contains(event.target as Node)) {
+        setIsCajasOpen(false)
+      }
     }
 
-    if (isComprasOpen) {
+    if (isComprasOpen || isCajasOpen) {
       document.addEventListener('mousedown', handleClickOutside)
     }
 
     return () => {
       document.removeEventListener('mousedown', handleClickOutside)
     }
-  }, [isComprasOpen])
+  }, [isComprasOpen, isCajasOpen])
 
   const handleLogoClick = () => {
     if (!isLoggedIn) {
@@ -168,6 +174,47 @@ export default function TopNavbar() {
             >
               Ventas
             </Link>
+            {/* Cajas Dropdown */}
+             <div className='relative' ref={cajasDropdownRef}>
+                  <button
+                    onClick={() => setIsCajasOpen(!isCajasOpen)}
+                    className='flex items-center gap-1 px-3 py-2 rounded-lg text-sm text-slate-200 hover:bg-slate-900 transition-colors'
+                  >
+                    Cajas
+                    <ChevronDown className={`h-4 w-4 transition-transform ${isCajasOpen ? 'rotate-180' : ''}`} />
+                  </button>
+                  
+                  {isCajasOpen && (
+                    <div className='absolute top-full mt-1 left-0 min-w-[200px] rounded-lg border border-slate-800 bg-slate-950 shadow-lg py-1 z-50'>
+                      <Link
+                        href='/caja'
+                        onClick={() => setIsCajasOpen(false)}
+                        className='block px-4 py-2 text-sm text-slate-200 hover:bg-slate-900'
+                      >
+                        Control de Caja (Abrir/Cerrar)
+                      </Link>
+                      {canAdminMenu && (
+                        <Link
+                          href='/configuracion/cajas'
+                          onClick={() => setIsCajasOpen(false)}
+                          className='block px-4 py-2 text-sm text-slate-200 hover:bg-slate-900 border-t border-slate-900 mt-1 pt-2'
+                        >
+                          Administrar Cajas
+                        </Link>
+                      )}
+                    </div>
+                  )}
+            </div>
+
+            {/* Turnos Link */}
+            {canAdminMenu && (
+                <Link
+                href='/configuracion/turnos'
+                className='px-3 py-2 rounded-lg text-sm text-slate-200 hover:bg-slate-900'
+                >
+                Turnos
+                </Link>
+            )}
 
             {/* Compras con dropdown: Encargado + AdminLike */}
             {canCompras && (
@@ -232,8 +279,10 @@ export default function TopNavbar() {
                 >
                   Reportes
                 </Link>
+
               </>
             )}
+
 
             {/* Logout icon */}
             <button

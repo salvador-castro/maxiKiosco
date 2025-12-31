@@ -95,6 +95,7 @@ export default function LoginPage() {
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-slate-700">Username</label>
             <input
+              suppressHydrationWarning={true}
               className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5
                          text-slate-900 placeholder:text-slate-500
                          outline-none focus:border-indigo-300 focus:ring-4 focus:ring-indigo-100"
@@ -109,6 +110,7 @@ export default function LoginPage() {
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-slate-700">Password</label>
             <input
+              suppressHydrationWarning={true}
               type="password"
               className="w-full rounded-xl border border-slate-200 bg-white px-4 py-2.5
                          text-slate-900 placeholder:text-slate-500

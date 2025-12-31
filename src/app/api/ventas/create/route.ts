@@ -12,6 +12,21 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "No autorizado" }, { status: 401 });
         }
 
+        // Decode token to get user id. 
+        // We can use `jwt` or `jose`. The project has jsonwebtoken calling from `jwt-decode` client side usually, 
+        // but here we are server side.
+        // Or simply assume the auth middleware adds headers? No, code uses cookies manually.
+        // Let's rely on a helper if available, or just parse payload roughly if signed.
+        // Actually, assuming `jwt.decode` if available or `jose`.
+        // Let's use `jsonwebtoken` if installed (checked package.json earlier, yes).
+        const jwt = require("jsonwebtoken");
+        const decoded = jwt.decode(token) as any;
+        const id_usuario = decoded?.id || decoded?.sub; // Adjust based on your token structure
+
+        if (!id_usuario) {
+            return NextResponse.json({ error: "Usuario no identificado en token" }, { status: 401 });
+        }
+
         const body = await req.json();
         const { items, forma_pago, id_sede } = body;
 
@@ -19,9 +34,28 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Items requeridos" }, { status: 400 });
         }
 
-        if (!forma_pago || !id_sede) {
-            return NextResponse.json({ error: "Forma de pago y sede requeridos" }, { status: 400 });
+        if (!id_sede) {
+            return NextResponse.json({ error: "Sede requerida" }, { status: 400 });
         }
+
+        // 0. Find Active Session (Caja Sesion)
+        const { data: sessionData, error: sessionError } = await supabaseServer
+            .from("caja_sesiones")
+            .select("id_sesion")
+            .eq("id_sede", id_sede)
+            .eq("id_usuario_apertura", id_usuario)
+            .is("cierre_at", null) // Active session has no closing date
+            .order("apertura_at", { ascending: false })
+            .limit(1)
+            .single();
+
+        if (sessionError || !sessionData) {
+            // Option: Auto-open session? Or Error?
+            // "No hay turno/caja abierta".
+            return NextResponse.json({ error: "No tenés una caja abierta. Abrí la caja antes de vender." }, { status: 400 });
+        }
+
+        const id_sesion = sessionData.id_sesion;
 
         // 1. Resolve effective ingredients for stock for ALL items
         // We need to know:
@@ -103,12 +137,13 @@ export async function POST(req: Request) {
         if (insumosToCheck.length > 0) {
             const { data: stockData, error: stockCheckError } = await supabaseServer
                 .from("stock_sede")
-                .select("id_insumo, cantidad, insumos(nombre)")
+                .select("id_insumo, cantidad_actual, insumos(nombre)")
                 .eq("id_sede", id_sede)
                 .in("id_insumo", insumosToCheck);
 
             if (stockCheckError) {
-                return NextResponse.json({ error: "Error checking stock levels" }, { status: 500 });
+                console.error("Stock Check Error:", stockCheckError);
+                return NextResponse.json({ error: "Error checking stock levels: " + stockCheckError.message }, { status: 500 });
             }
 
             const stockMap = new Map(stockData?.map(s => [s.id_insumo, s]) || []);
@@ -116,7 +151,7 @@ export async function POST(req: Request) {
             // Check each requirement
             for (const [id_insumo, requiredQty] of stockRequirements.entries()) {
                 const stockEntry = stockMap.get(id_insumo);
-                const available = stockEntry?.cantidad || 0;
+                const available = stockEntry?.cantidad_actual || 0;
 
                 if (available < requiredQty) {
                     // Try to get name for better error
@@ -140,10 +175,14 @@ export async function POST(req: Request) {
         const { data: ventaData, error: ventaError } = await supabaseServer
             .from("ventas")
             .insert({
-                total,
-                forma_pago,
                 id_sede,
-                fecha: new Date().toISOString(),
+                id_sesion,
+                id_usuario,
+                fecha_hora: new Date(), // User schema has fecha_hora
+                total_bruto: total,
+                total_neto: total, // Assuming 0 global discount for now
+                descuento_total: 0,
+                estado: "pagada", // Trigger will deduct stock on this state
             })
             .select()
             .single();
@@ -172,33 +211,8 @@ export async function POST(req: Request) {
         }
 
         // 4. Deduct Stock
-        // We already calculated total requirements in `stockRequirements`.
-        // We can execute parallel updates or individual updates.
-        // Parallel updates are risky for race conditions but standard for this scale.
-
-        for (const [id_insumo, qty] of stockRequirements.entries()) {
-            // We use rpc 'decrement_stock' if it existed, otherwise read-update.
-            // Given the previous code used read-update loops, we'll stick to a simple SQL update or the previous pattern.
-            // But a direct update with decrement is safer: update stock_sede set cantidad = cantidad - X ...
-            // Supabase JS doesn't support "increment/decrement" directly in valid readable syntax easily without RPC usually.
-            // We will stick to the read-modify-write pattern but fetch fresh stock to be safe-ish?
-            // Actually, we can just fetch the current row again.
-
-            const { data: currentS, error: fetchErr } = await supabaseServer
-                .from("stock_sede")
-                .select("cantidad")
-                .eq("id_sede", id_sede)
-                .eq("id_insumo", id_insumo)
-                .single();
-
-            if (!fetchErr && currentS) {
-                await supabaseServer
-                    .from("stock_sede")
-                    .update({ cantidad: currentS.cantidad - qty })
-                    .eq("id_sede", id_sede)
-                    .eq("id_insumo", id_insumo);
-            }
-        }
+        // REMOVED: Database trigger `ventas_pagada_aplica_stock` handles this when estado='pagada'.
+        // We inserted with estado='pagada', so stock should be updated automatically.
 
         return NextResponse.json({
             success: true,
