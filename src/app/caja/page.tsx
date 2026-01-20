@@ -6,6 +6,11 @@ import { formatCurrency } from "@/utils/format";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
+const ROLE_ID_DUENO = 'becb28f7-2cb0-46c7-8fff-86e4ba8f2f68';
+const ROLE_ID_SUPERADMIN = 'b6bd71da-9208-4bd6-831a-dec53635913d';
+
+type Sede = { id_sede: string; nombre: string };
+
 export default function CajaPage() {
     const { user } = useSession();
     const [loading, setLoading] = useState(true);
@@ -21,18 +26,45 @@ export default function CajaPage() {
     const [selectedCaja, setSelectedCaja] = useState("");
     const [selectedTurno, setSelectedTurno] = useState("");
 
-    const id_sede = user?.id_sede;
+    const [sedes, setSedes] = useState<Sede[]>([]);
+    
+    // Admin Logic
+    const isAdmin = (user as any)?.id_rol === ROLE_ID_SUPERADMIN || (user as any)?.id_rol === ROLE_ID_DUENO;
+    const userSede = user?.id_sede;
+    const [activeSede, setActiveSede] = useState("");
 
     useEffect(() => {
-        if (id_sede) {
+        if (userSede && !activeSede && !isAdmin) {
+            setActiveSede(userSede);
+        }
+    }, [userSede, isAdmin]);
+
+    useEffect(() => {
+        if (isAdmin) {
+             fetchSedes();
+             // If admin has no active sede selected yet, stop loading so they can interact
+             if (!activeSede) setLoading(false);
+        }
+    }, [isAdmin, activeSede]);
+
+    useEffect(() => {
+        if (activeSede) {
             fetchSession();
             fetchInfo();
         }
-    }, [id_sede]);
+    }, [activeSede]);
+
+    async function fetchSedes() {
+        try {
+            const res = await fetch("/api/sedes/list");
+            const json = await res.json();
+            if (res.ok) setSedes(json.data || []);
+        } catch (e) { console.error(e); }
+    }
 
     async function fetchInfo() {
         try {
-            const res = await fetch(`/api/caja/info?id_sede=${id_sede}`);
+            const res = await fetch(`/api/caja/info?id_sede=${activeSede}`);
             const json = await res.json();
             if (res.ok) {
                 setCajas(json.cajas || []);
@@ -49,7 +81,7 @@ export default function CajaPage() {
     async function fetchSession() {
         setLoading(true);
         try {
-            const res = await fetch(`/api/caja/sesion?id_sede=${id_sede}`);
+            const res = await fetch(`/api/caja/sesion?id_sede=${activeSede}`);
             const json = await res.json();
             if (json.active) {
                 setSesion(json.session);
@@ -76,7 +108,7 @@ export default function CajaPage() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    id_sede,
+                    id_sede: activeSede,
                     monto_inicial: parseFloat(montoInicial),
                     id_caja: selectedCaja,
                     id_turno: selectedTurno
@@ -265,6 +297,21 @@ export default function CajaPage() {
 
                         <div className="bg-slate-50 p-6 rounded-xl border border-slate-100 space-y-4">
                             
+                            {isAdmin && (
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-700 mb-1">Sede de Operación</label>
+                                    <select 
+                                        value={activeSede}
+                                        onChange={e => setActiveSede(e.target.value)}
+                                        className="w-full rounded-xl border border-slate-200 px-3 py-2 text-slate-900 bg-white"
+                                    >
+                                        <option value="">Seleccionar Sede...</option>
+                                        {sedes.map(s => <option key={s.id_sede} value={s.id_sede}>{s.nombre}</option>)}
+                                    </select>
+                                    <p className="text-xs text-slate-500 mt-1">Como administrador podés abrir cajas en cualquier sede.</p>
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-slate-700 mb-1">Caja</label>
@@ -285,7 +332,7 @@ export default function CajaPage() {
                                         className="w-full rounded-xl border border-slate-200 px-3 py-2 text-slate-900 bg-white"
                                     >
                                         <option value="">Seleccionar...</option>
-                                        {turnos.map(t => <option key={t.id_turno} value={t.nombre || t.id_turno}>{t.nombre || "Turno"}</option>)}
+                                        {turnos.map(t => <option key={t.id_turno} value={t.id_turno}>{t.nombre || "Turno"}</option>)}
                                     </select>
                                 </div>
                             </div>

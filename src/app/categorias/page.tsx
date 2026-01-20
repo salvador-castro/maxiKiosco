@@ -244,7 +244,7 @@ export default function CategoriasPage() {
           <div className="overflow-auto">
             <table className="w-full text-sm">
               <thead className="bg-slate-50 text-slate-600">
-                <tr className="text-left">
+                <tr className="text-center">
                   <th className="p-4 font-medium">Nombre</th>
                   <th className="p-4 font-medium">Estado</th>
                   <th className="p-4 font-medium">Acciones</th>
@@ -254,19 +254,19 @@ export default function CategoriasPage() {
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={3} className="p-6 text-slate-500">
+                    <td colSpan={3} className="p-6 text-center text-slate-500">
                       Cargando…
                     </td>
                   </tr>
                 ) : filteredRows.length === 0 ? (
                   <tr>
-                    <td colSpan={3} className="p-6 text-slate-500">
+                    <td colSpan={3} className="p-6 text-center text-slate-500">
                       Sin resultados
                     </td>
                   </tr>
                 ) : (
                   filteredRows.map((c) => (
-                    <tr key={c.id_categoria} className="hover:bg-slate-50/60 transition">
+                    <tr key={c.id_categoria} className="hover:bg-slate-50/60 transition text-center">
                       <td className="p-4">
                         <div className="font-semibold text-slate-900">{c.nombre}</div>
                       </td>
@@ -274,7 +274,7 @@ export default function CategoriasPage() {
                         {c.activa ? <Chip tone="emerald">Activa</Chip> : <Chip tone="rose">Inactiva</Chip>}
                       </td>
                       <td className="p-4">
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex flex-wrap gap-2 justify-center">
                           <button
                             className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-slate-700 hover:bg-slate-50"
                             onClick={() => openEdit(c)}
