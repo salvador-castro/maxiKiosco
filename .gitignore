@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# AFIP Certificates (NEVER commit these!)
+/certs/*.crt
+/certs/*.key
+/certs/*.csr
+/certs/*.pem

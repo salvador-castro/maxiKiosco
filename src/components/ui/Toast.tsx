@@ -33,7 +33,7 @@ export default function Toast({
       : "border-sky-200 bg-sky-50 text-sky-800";
 
   return (
-    <div className="fixed right-4 top-4 z-50">
+    <div className="fixed right-4 top-4 z-100">
       <div className={`rounded-xl border px-4 py-3 shadow-sm ${styles}`}>
         <div className="flex items-start gap-3">
           <div className="text-sm font-medium">{message}</div>
