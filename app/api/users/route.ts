@@ -39,6 +39,13 @@ export async function POST(req: NextRequest) {
     serviceKey
   )
 
+  // Verificar que el email no esté en uso
+  const { data: authUsers } = await adminClient.auth.admin.listUsers()
+  const emailTaken = authUsers?.users?.some(u => u.email === email)
+  if (emailTaken) {
+    return NextResponse.json({ error: 'El email ya está en uso' }, { status: 400 })
+  }
+
   const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
     email,
     password,
@@ -50,9 +57,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: createError.message }, { status: 400 })
   }
 
-  // Actualizar el perfil con branch_id (el trigger ya lo crea sin branch)
-  if (branch_id && newUser.user) {
-    await adminClient.from('profiles').update({ branch_id }).eq('id', newUser.user.id)
+  // Actualizar el perfil con branch_id y full_name (el trigger ya lo crea sin branch)
+  if (newUser.user) {
+    await adminClient.from('profiles').update({
+      full_name,
+      role,
+      ...(branch_id ? { branch_id } : {}),
+    }).eq('id', newUser.user.id)
   }
 
   return NextResponse.json({ ok: true, user_id: newUser.user?.id })

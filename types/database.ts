@@ -212,6 +212,10 @@ export interface SaleWithItems extends Sale {
   profile: Pick<Profile, 'full_name'>
 }
 
+export interface PromotionWithItems extends Promotion {
+  promotion_items: (PromotionItem & { products: Product })[]
+}
+
 export interface StockWithProduct extends Stock {
   products: Product & {
     categories: Category | null

@@ -9,12 +9,13 @@ import { Wallet, LockOpen, Lock, AlertCircle, CheckCircle } from 'lucide-react'
 
 const SHIFTS: Shift[] = ['mañana', 'tarde', 'noche']
 
+type RegisterWithBranch = CashRegister & { branches: { id: string; name: string } }
+
 export default function CajaPage() {
   const supabase = createClient()
   const { profile } = useProfile()
   const { session, loading, refresh } = useCashSession()
-  const [registers, setRegisters] = useState<(CashRegister & { branches: { name: string } })[]>([])
-
+  const [registers, setRegisters] = useState<RegisterWithBranch[]>([])
 
   // Formulario apertura
   const [selectedRegister, setSelectedRegister] = useState('')
@@ -22,16 +23,13 @@ export default function CajaPage() {
   const [openingAmount, setOpeningAmount] = useState('')
   const [opening, setOpening] = useState(false)
 
-  // Formulario cierre
+  // Formulario cierre (solo efectivo — débito y transferencia se toman de las ventas)
   const [closingCash, setClosingCash] = useState('')
-  const [closingDebit, setClosingDebit] = useState('')
-  const [closingTransfer, setClosingTransfer] = useState('')
   const [closingNotes, setClosingNotes] = useState('')
   const [closing, setClosing] = useState(false)
 
   const [message, setMessage] = useState<{ type: 'ok' | 'error'; text: string } | null>(null)
 
-  // Estadísticas de la sesión actual
   const [sessionStats, setSessionStats] = useState<{
     totalSales: number
     cashSales: number
@@ -40,15 +38,24 @@ export default function CajaPage() {
     count: number
   } | null>(null)
 
-  // Cargar cajas al montar (el middleware ya garantiza que el usuario está autenticado)
+  // Cargar cajas filtradas por rol
   useEffect(() => {
+    if (!profile) return
     supabase
       .from('cash_registers')
-      .select('*, branches(name)')
+      .select('*, branches(id, name)')
       .eq('is_active', true)
       .order('name')
-      .then(({ data }) => setRegisters((data as any) || []))
-  }, [])
+      .then(({ data }) => {
+        const all = (data as RegisterWithBranch[]) || []
+        if (profile.role === 'admin') {
+          setRegisters(all)
+        } else {
+          // encargado/vendedor: solo su sucursal
+          setRegisters(all.filter(r => r.branch_id === profile.branch_id))
+        }
+      })
+  }, [profile])
 
   useEffect(() => {
     if (!session) { setSessionStats(null); return }
@@ -107,8 +114,8 @@ export default function CajaPage() {
       .update({
         status: 'closed',
         closing_cash_amount: parseFloat(closingCash) || 0,
-        closing_debit_amount: parseFloat(closingDebit) || 0,
-        closing_transfer_amount: parseFloat(closingTransfer) || 0,
+        closing_debit_amount: sessionStats?.debitSales ?? 0,
+        closing_transfer_amount: sessionStats?.transferSales ?? 0,
         notes: closingNotes,
         closed_at: new Date().toISOString(),
       })
@@ -119,13 +126,21 @@ export default function CajaPage() {
     } else {
       setMessage({ type: 'ok', text: 'Caja cerrada correctamente' })
       setClosingCash('')
-      setClosingDebit('')
-      setClosingTransfer('')
       setClosingNotes('')
       refresh()
     }
     setClosing(false)
   }
+
+  // Agrupar cajas por sucursal (para admin)
+  const registersByBranch = registers.reduce((acc, r) => {
+    const branchName = r.branches?.name ?? 'Sin sucursal'
+    if (!acc[branchName]) acc[branchName] = []
+    acc[branchName].push(r)
+    return acc
+  }, {} as Record<string, RegisterWithBranch[]>)
+
+  const isAdmin = profile?.role === 'admin'
 
   if (loading) {
     return <div className="flex items-center justify-center h-full text-gray-500">Cargando...</div>
@@ -166,11 +181,18 @@ export default function CajaPage() {
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               >
                 <option value="">Seleccionar caja...</option>
-                {registers.map(r => (
-                  <option key={r.id} value={r.id}>
-                    {r.name} — {r.branches?.name}
-                  </option>
-                ))}
+                {isAdmin
+                  ? Object.entries(registersByBranch).map(([branch, regs]) => (
+                      <optgroup key={branch} label={branch}>
+                        {regs.map(r => (
+                          <option key={r.id} value={r.id}>{r.name}</option>
+                        ))}
+                      </optgroup>
+                    ))
+                  : registers.map(r => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))
+                }
               </select>
             </div>
 
@@ -288,31 +310,25 @@ export default function CajaPage() {
             </div>
             <form onSubmit={handleClose} className="space-y-4">
               <p className="text-sm text-gray-500">
-                Ingresá los montos reales contados al cierre del turno.
+                Contá el efectivo físico en caja. Débito y transferencia se registran automáticamente desde las ventas.
               </p>
 
-              {[
-                { label: 'Efectivo en caja', value: closingCash, setter: setClosingCash },
-                { label: 'Ventas con débito', value: closingDebit, setter: setClosingDebit },
-                { label: 'Ventas por transferencia', value: closingTransfer, setter: setClosingTransfer },
-              ].map(({ label, value, setter }) => (
-                <div key={label}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
-                  <div className="relative">
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      value={value}
-                      onChange={e => setter(e.target.value)}
-                      required
-                      placeholder="0.00"
-                      className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Efectivo en caja</label>
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">$</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={closingCash}
+                    onChange={e => setClosingCash(e.target.value)}
+                    required
+                    placeholder="0.00"
+                    className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                 </div>
-              ))}
+              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Observaciones (opcional)</label>

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useProfile } from '@/hooks/useProfile'
 import type { Profile, Branch, UserRole } from '@/types/database'
-import { Users, Plus, Edit2, UserCheck, UserX, X, Check } from 'lucide-react'
+import { Users, Plus, Edit2, UserCheck, UserX, X, Check, KeyRound } from 'lucide-react'
 
 interface ProfileWithBranch extends Profile {
   branches: Branch | null
@@ -36,6 +36,12 @@ export default function UsuariosPage() {
   const [editActive, setEditActive] = useState(true)
   const [saving, setSaving] = useState(false)
 
+  // Modal cambiar contraseña
+  const [changePwdUserId, setChangePwdUserId] = useState<string | null>(null)
+  const [changePwdValue, setChangePwdValue] = useState('')
+  const [savingPwd, setSavingPwd] = useState(false)
+  const [changePwdError, setChangePwdError] = useState('')
+
   async function load() {
     setLoading(true)
     const [{ data: u }, { data: b }] = await Promise.all([
@@ -53,7 +59,7 @@ export default function UsuariosPage() {
     setEditingId(user.id)
     setEditRole(user.role)
     setEditBranch(user.branch_id || '')
-    setEditActive(user.is_active)
+    setEditActive(user.is_active ?? true)
   }
 
   async function saveEdit(userId: string) {
@@ -73,7 +79,6 @@ export default function UsuariosPage() {
     setCreating(true)
     setCreateError('')
 
-    // Llamar a la API route que usa el service role para crear usuarios
     const res = await fetch('/api/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -98,6 +103,28 @@ export default function UsuariosPage() {
     setCreating(false)
   }
 
+  async function handleChangePassword(e: React.FormEvent) {
+    e.preventDefault()
+    if (!changePwdUserId) return
+    setSavingPwd(true)
+    setChangePwdError('')
+
+    const res = await fetch(`/api/users/${changePwdUserId}/password`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: changePwdValue }),
+    })
+
+    if (!res.ok) {
+      const { error } = await res.json()
+      setChangePwdError(error || 'Error al cambiar la contraseña')
+    } else {
+      setChangePwdUserId(null)
+      setChangePwdValue('')
+    }
+    setSavingPwd(false)
+  }
+
   const canManage = currentUser?.role === 'admin' || currentUser?.role === 'encargado'
 
   if (!canManage) {
@@ -107,6 +134,8 @@ export default function UsuariosPage() {
       </div>
     )
   }
+
+  const changePwdUser = users.find(u => u.id === changePwdUserId)
 
   return (
     <div className="p-6">
@@ -141,10 +170,12 @@ export default function UsuariosPage() {
             ) : (
               users.map(user => {
                 const isEditing = editingId === user.id
+                const isSelf = user.id === currentUser?.id
                 return (
                   <tr key={user.id} className="border-b border-gray-50 hover:bg-gray-50/50">
                     <td className="px-4 py-3">
                       <p className="font-medium text-gray-800">{user.full_name}</p>
+                      {isSelf && <p className="text-xs text-blue-500">Tú</p>}
                     </td>
                     <td className="px-4 py-3">
                       {isEditing ? (
@@ -203,26 +234,32 @@ export default function UsuariosPage() {
                           <button
                             onClick={() => saveEdit(user.id)}
                             disabled={saving}
-                            className="p-1.5 bg-green-100 text-green-600 hover:bg-green-200 rounded-lg"
+                            className="flex items-center gap-1 px-2 py-1.5 bg-green-100 text-green-700 hover:bg-green-200 rounded-lg text-xs font-medium"
                           >
-                            <Check size={14} />
+                            <Check size={12} /> Guardar
                           </button>
                           <button
                             onClick={() => setEditingId(null)}
-                            className="p-1.5 bg-gray-100 text-gray-500 hover:bg-gray-200 rounded-lg"
+                            className="flex items-center gap-1 px-2 py-1.5 bg-gray-100 text-gray-600 hover:bg-gray-200 rounded-lg text-xs font-medium"
                           >
-                            <X size={14} />
+                            <X size={12} /> Cancelar
                           </button>
                         </div>
                       ) : (
-                        user.id !== currentUser?.id && (
+                        <div className="flex items-center justify-center gap-2">
                           <button
                             onClick={() => startEdit(user)}
-                            className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            className="flex items-center gap-1 px-3 py-1.5 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-xs font-medium transition-colors"
                           >
-                            <Edit2 size={14} />
+                            <Edit2 size={12} /> Editar
                           </button>
-                        )
+                          <button
+                            onClick={() => { setChangePwdUserId(user.id); setChangePwdValue(''); setChangePwdError('') }}
+                            className="flex items-center gap-1 px-3 py-1.5 bg-amber-50 text-amber-600 hover:bg-amber-100 rounded-lg text-xs font-medium transition-colors"
+                          >
+                            <KeyRound size={12} /> Clave
+                          </button>
+                        </div>
                       )}
                     </td>
                   </tr>
@@ -246,21 +283,24 @@ export default function UsuariosPage() {
                 <label className="block text-sm font-medium text-gray-700 mb-1">Nombre completo</label>
                 <input
                   type="text" value={newName} onChange={e => setNewName(e.target.value)}
-                  required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required placeholder="Ej: Juan Pérez"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
                 <input
                   type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)}
-                  required className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required placeholder="usuario@email.com"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Contraseña</label>
                 <input
                   type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)}
-                  required minLength={6} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  required minLength={6} placeholder="Mínimo 6 caracteres"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
               </div>
               <div className="grid grid-cols-2 gap-3">
@@ -296,6 +336,52 @@ export default function UsuariosPage() {
                   className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-semibold hover:bg-blue-700 disabled:bg-gray-300"
                 >
                   {creating ? 'Creando...' : 'Crear usuario'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal cambiar contraseña */}
+      {changePwdUserId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+            <h3 className="text-lg font-bold text-gray-900 mb-1">Cambiar contraseña</h3>
+            <p className="text-sm text-gray-500 mb-4">
+              {changePwdUser?.full_name} deberá cambiarla al próximo inicio de sesión.
+            </p>
+            <form onSubmit={handleChangePassword} className="space-y-4">
+              {changePwdError && (
+                <p className="text-sm text-red-600 bg-red-50 px-3 py-2 rounded-lg">{changePwdError}</p>
+              )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Nueva contraseña</label>
+                <input
+                  type="password"
+                  value={changePwdValue}
+                  onChange={e => setChangePwdValue(e.target.value)}
+                  required
+                  minLength={6}
+                  autoFocus
+                  placeholder="Mínimo 6 caracteres"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => { setChangePwdUserId(null); setChangePwdValue(''); setChangePwdError('') }}
+                  className="flex-1 py-2.5 border border-gray-300 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingPwd}
+                  className="flex-1 py-2.5 bg-amber-500 text-white rounded-xl text-sm font-semibold hover:bg-amber-600 disabled:bg-gray-300"
+                >
+                  {savingPwd ? 'Guardando...' : 'Cambiar contraseña'}
                 </button>
               </div>
             </form>

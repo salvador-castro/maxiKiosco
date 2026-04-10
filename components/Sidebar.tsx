@@ -14,6 +14,7 @@ import {
   LogOut,
   Wallet,
   Store,
+  Tag,
 } from 'lucide-react'
 
 interface NavItem {
@@ -40,6 +41,12 @@ const NAV_ITEMS: NavItem[] = [
     href: '/stock',
     label: 'Stock',
     icon: <Package size={20} />,
+    roles: ['encargado', 'admin'],
+  },
+  {
+    href: '/promociones',
+    label: 'Promociones',
+    icon: <Tag size={20} />,
     roles: ['encargado', 'admin'],
   },
   {
