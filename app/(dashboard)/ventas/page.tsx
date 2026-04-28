@@ -184,8 +184,9 @@ export default function VentasPage() {
     )
   }
 
-  function setProductCartQty(productId: string, qty: number) {
-    if (qty <= 0) {
+  function setProductCartQty(productId: string, qty: number, unit?: string) {
+    const minQty = unit === 'kg' ? 0.5 : 1
+    if (qty < minQty) {
       setCart(prev => prev.filter(e => !(e.kind === 'product' && e.product.id === productId)))
       return
     }
@@ -503,7 +504,7 @@ export default function VentasPage() {
                     <div className="text-xs text-gray-400 mb-2">{product.categories?.name}</div>
                     <div className="flex items-end justify-between gap-1">
                       <div className="text-base font-bold text-blue-600">
-                        ${product.price.toFixed(2)}
+                        ${product.price.toFixed(2)}<span className="text-xs font-normal text-gray-400">/{product.unit}</span>
                       </div>
                       {stock !== null && (
                         <span className={`text-xs font-medium px-1.5 py-0.5 rounded ${
@@ -561,28 +562,31 @@ export default function VentasPage() {
           ) : (
             cart.map((entry, idx) => {
               if (entry.kind === 'product') {
+                const isKg = entry.product.unit === 'kg'
+                const step = isKg ? 0.5 : 1
                 return (
                   <div key={`p-${entry.product.id}`} className="flex items-center gap-2 py-2 border-b border-gray-50">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-gray-800 truncate">{entry.product.name}</p>
-                      <p className="text-xs text-gray-500">${entry.product.price.toFixed(2)} c/u</p>
+                      <p className="text-xs text-gray-500">${entry.product.price.toFixed(2)}/{entry.product.unit}</p>
                     </div>
                     <div className="flex items-center gap-1">
                       <button
-                        onClick={() => updateProductQty(entry.product.id, -1)}
+                        onClick={() => updateProductQty(entry.product.id, -step)}
                         className="w-6 h-6 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200"
                       >
                         <Minus size={12} />
                       </button>
                       <input
                         type="number"
-                        min="1"
+                        min={step}
+                        step={step}
                         value={entry.quantity}
-                        onChange={e => setProductCartQty(entry.product.id, parseInt(e.target.value) || 1)}
-                        className="w-10 text-center text-sm font-semibold border border-gray-200 rounded px-1 py-0.5 focus:outline-none focus:border-blue-400"
+                        onChange={e => setProductCartQty(entry.product.id, parseFloat(e.target.value) || step, entry.product.unit)}
+                        className="w-12 text-center text-sm font-semibold border border-gray-200 rounded px-1 py-0.5 focus:outline-none focus:border-blue-400"
                       />
                       <button
-                        onClick={() => updateProductQty(entry.product.id, 1)}
+                        onClick={() => updateProductQty(entry.product.id, step)}
                         className="w-6 h-6 flex items-center justify-center rounded bg-gray-100 hover:bg-gray-200"
                       >
                         <Plus size={12} />
